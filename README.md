@@ -8,6 +8,7 @@ A lightweight, type-safe feature flag library for React applications with zero d
 ## Why Use This Library?
 
 - **Type-Safe**: Full TypeScript support with generics for any value type
+- **User-Specific Overrides**: Per-user flag overrides on top of global config
 - **Flexible Values**: Support for booleans, strings, numbers, arrays, and nested objects
 - **Nested Config**: Organize flags hierarchically, automatically flattened to dotted notation
 - **Zero Dependencies**: Only requires React as a peer dependency
@@ -123,11 +124,18 @@ The provider component that makes feature flags available to your app.
 
 **Props:**
 - `config`: `Record<string, any>` (required) - Your feature flag configuration (supports nested objects)
+- `userOverrides`: `Record<string, Record<string, any>>` (optional) - Per-user flag overrides keyed by userId. User overrides take precedence over config for the specified user.
 - `children`: `ReactNode` (required) - Your application components
 
 **Example:**
 ```tsx
-<FeatureFlagProvider config={{ features: { auth: true } }}>
+<FeatureFlagProvider
+  config={{ features: { auth: true, beta: false } }}
+  userOverrides={{
+    user1: { features: { beta: true } },
+    user2: { limits: { maxAccounts: 20 } },
+  }}
+>
   <App />
 </FeatureFlagProvider>
 ```
@@ -178,6 +186,43 @@ const isDarkMode = useFeatureEnabled('theme', 'dark');                 // true i
 
 ---
 
+### `useFeatureFlagForUser<T>(userId: string, key: string)`
+
+Get a feature flag value for a specific user. Falls back to global config if no user override exists.
+
+**Parameters:**
+- `userId`: `string` - The user identifier
+- `key`: `string` - The feature flag key (supports dotted notation)
+
+**Returns:** `T | undefined` - The flag value or undefined if not found
+
+**Examples:**
+```tsx
+const maxAccounts = useFeatureFlagForUser<number>('user1', 'limits.maxAccounts');
+const platforms = useFeatureFlagForUser<string[]>('user1', 'platforms');
+```
+
+---
+
+### `useFeatureEnabledForUser(userId: string, key: string, value?: any)`
+
+Check if a feature is enabled for a specific user. Falls back to global config if no user override exists.
+
+**Parameters:**
+- `userId`: `string` - The user identifier
+- `key`: `string` - The feature flag key
+- `value?`: `any` - Optional value to check in arrays
+
+**Returns:** `boolean` - True if enabled, false otherwise
+
+**Examples:**
+```tsx
+const hasBeta = useFeatureEnabledForUser('user1', 'features.beta');
+const hasFacebook = useFeatureEnabledForUser('user1', 'platforms', 'facebook');
+```
+
+---
+
 ### `<Flag>`
 
 Declarative component for conditional rendering based on feature flags.
@@ -214,9 +259,11 @@ Access the full feature flags context (advanced usage).
 **Returns:**
 ```typescript
 {
-  flags: Record<string, any>;                          // All flattened flags
-  getFeatureValue: <T>(key: string) => T | undefined; // Get value (same as useFeatureFlag)
-  isFeatureEnabled: (key: string, value?: any) => boolean; // Check enabled (same as useFeatureEnabled)
+  flags: Record<string, any>;
+  getFeatureValue: <T>(key: string) => T | undefined;
+  isFeatureEnabled: (key: string, value?: any) => boolean;
+  getFeatureValueForUser: <T>(userId: string, key: string) => T | undefined;
+  isFeatureEnabledForUser: (userId: string, key: string, value?: any) => boolean;
 }
 ```
 
@@ -273,6 +320,60 @@ const oauth = useFeatureFlag<boolean>('features.auth.oauth');
 const providers = useFeatureFlag<string[]>('features.auth.providers');
 ```
 
+### User-Specific Overrides
+
+Apply per-user flag overrides on top of global configuration:
+
+```tsx
+import {
+  FeatureFlagProvider,
+  useFeatureEnabledForUser,
+  useFeatureFlagForUser,
+} from '@tactic-social/tas-feature-flags-react';
+
+const globalConfig = {
+  features: {
+    auth: true,
+    beta: false,
+  },
+  limits: {
+    maxAccounts: 5,
+  },
+};
+
+const userOverrides = {
+  user1: { features: { beta: true }, limits: { maxAccounts: 20 } },
+  user2: { features: { beta: true } },
+};
+
+function App() {
+  return (
+    <FeatureFlagProvider config={globalConfig} userOverrides={userOverrides}>
+      <Dashboard />
+    </FeatureFlagProvider>
+  );
+}
+
+function Dashboard() {
+  const hasBeta = useFeatureEnabledForUser('user1', 'features.beta'); // true (overridden)
+  const maxAccounts = useFeatureFlagForUser<number>('user1', 'limits.maxAccounts'); // 20 (overridden)
+  const hasAuth = useFeatureEnabledForUser('user1', 'features.auth'); // true (from global)
+
+  return (
+    <div>
+      {hasBeta && <BetaFeature />}
+      <p>Max accounts: {maxAccounts}</p>
+    </div>
+  );
+}
+```
+
+Override rules:
+- User overrides take precedence over global config for the specified user
+- If a user has no override for a key, the global config value is used
+- If the userId is not found in userOverrides, all lookups fall back to global config
+- Both `config` and `userOverrides` values support nested objects (both are flattened)
+
 ### Loading Config from API
 
 ```tsx
@@ -281,21 +382,24 @@ import { FeatureFlagProvider } from '@tactic-social/tas-feature-flags-react';
 
 function App() {
   const [config, setConfig] = useState({});
+  const [userOverrides, setUserOverrides] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/feature-flags')
-      .then(res => res.json())
-      .then(data => {
-        setConfig(data);
-        setLoading(false);
-      });
+    Promise.all([
+      fetch('/api/feature-flags').then(res => res.json()),
+      fetch('/api/user-overrides').then(res => res.json()),
+    ]).then(([globalFlags, overrides]) => {
+      setConfig(globalFlags);
+      setUserOverrides(overrides);
+      setLoading(false);
+    });
   }, []);
 
   if (loading) return <LoadingSpinner />;
 
   return (
-    <FeatureFlagProvider config={config}>
+    <FeatureFlagProvider config={config} userOverrides={userOverrides}>
       <Dashboard />
     </FeatureFlagProvider>
   );

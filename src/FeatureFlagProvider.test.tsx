@@ -211,6 +211,216 @@ describe('FeatureFlagProvider', () => {
     expect(screen.getByTestId('auth').textContent).toBe('Enabled');
   });
 
+  describe('userOverrides', () => {
+    it('user override takes precedence over config', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div data-testid="result">
+            {isFeatureEnabledForUser('user1', 'features.auth') ? 'Enabled' : 'Disabled'}
+          </div>
+        );
+      }
+
+      const config = { features: { auth: false } };
+      const userOverrides = { user1: { features: { auth: true } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('user override can add new keys not in config', () => {
+      function TestComponent() {
+        const { getFeatureValueForUser } = useFeatureFlags();
+        const beta = getFeatureValueForUser<boolean>('user1', 'features.beta');
+        return <div data-testid="result">{beta ? 'Enabled' : 'Disabled'}</div>;
+      }
+
+      const config = { features: { auth: true } };
+      const userOverrides = { user1: { features: { beta: true } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('falls back to global config when user has no override for key', () => {
+      function TestComponent() {
+        const { getFeatureValueForUser } = useFeatureFlags();
+        const auth = getFeatureValueForUser<boolean>('user1', 'features.auth');
+        return <div data-testid="result">{auth ? 'Enabled' : 'Disabled'}</div>;
+      }
+
+      const config = { features: { auth: true } };
+      const userOverrides = { user1: { features: { beta: false } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('falls back to global config for unknown userId', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div data-testid="result">
+            {isFeatureEnabledForUser('unknownUser', 'features.auth') ? 'Enabled' : 'Disabled'}
+          </div>
+        );
+      }
+
+      const config = { features: { auth: true } };
+      const userOverrides = { user1: { features: { auth: false } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('works when userOverrides is undefined', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div data-testid="result">
+            {isFeatureEnabledForUser('user1', 'features.auth') ? 'Enabled' : 'Disabled'}
+          </div>
+        );
+      }
+
+      render(
+        <FeatureFlagProvider config={{ features: { auth: true } }}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('flattens nested user overrides', () => {
+      function TestComponent() {
+        const { getFeatureValueForUser } = useFeatureFlags();
+        const oauth = getFeatureValueForUser<boolean>('user1', 'features.auth.oauth');
+        return <div data-testid="result">{oauth ? 'true' : 'false'}</div>;
+      }
+
+      const config = { features: { auth: { oauth: false } } };
+      const userOverrides = { user1: { features: { auth: { oauth: true } } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('true');
+    });
+
+    it('re-computes when userOverrides prop changes', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div data-testid="result">
+            {isFeatureEnabledForUser('user1', 'features.beta') ? 'Enabled' : 'Disabled'}
+          </div>
+        );
+      }
+
+      const config = { features: { beta: false } };
+
+      const { rerender } = render(
+        <FeatureFlagProvider config={config} userOverrides={{}}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Disabled');
+
+      rerender(
+        <FeatureFlagProvider config={config} userOverrides={{ user1: { features: { beta: true } } }}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('result').textContent).toBe('Enabled');
+    });
+
+    it('user overrides work with array values', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div>
+            <div data-testid="facebook">
+              {isFeatureEnabledForUser('user1', 'platforms', 'facebook') ? 'Yes' : 'No'}
+            </div>
+            <div data-testid="twitter">
+              {isFeatureEnabledForUser('user1', 'platforms', 'twitter') ? 'Yes' : 'No'}
+            </div>
+          </div>
+        );
+      }
+
+      const config = { platforms: ['facebook', 'instagram'] };
+      const userOverrides = { user1: { platforms: ['twitter'] } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('facebook').textContent).toBe('No');
+      expect(screen.getByTestId('twitter').textContent).toBe('Yes');
+    });
+
+    it('supports multiple users with different overrides', () => {
+      function TestComponent() {
+        const { isFeatureEnabledForUser } = useFeatureFlags();
+        return (
+          <div>
+            <div data-testid="user1">
+              {isFeatureEnabledForUser('user1', 'features.beta') ? 'Enabled' : 'Disabled'}
+            </div>
+            <div data-testid="user2">
+              {isFeatureEnabledForUser('user2', 'features.beta') ? 'Enabled' : 'Disabled'}
+            </div>
+          </div>
+        );
+      }
+
+      const config = { features: { beta: false } };
+      const userOverrides = {
+        user1: { features: { beta: true } },
+        user2: { features: { beta: false } },
+      };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <TestComponent />
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByTestId('user1').textContent).toBe('Enabled');
+      expect(screen.getByTestId('user2').textContent).toBe('Disabled');
+    });
+  });
+
   it('supports various value types', () => {
     function TestComponent() {
       const { getFeatureValue } = useFeatureFlags();
