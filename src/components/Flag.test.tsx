@@ -172,6 +172,87 @@ describe('Flag component', () => {
           <div>Content</div>
         </Flag>
       );
-    }).toThrow('useFeatureEnabled must be used within <FeatureFlagProvider>');
+    }).toThrow('useFeatureFlags must be used within <FeatureFlagProvider>');
+  });
+
+  describe('per-user overrides', () => {
+    it('renders children when a user override enables a globally disabled flag', () => {
+      const config = { features: { beta: false } };
+      const userOverrides = { user1: { features: { beta: true } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <Flag flag="features.beta" userId="user1">
+            <div>Beta Content</div>
+          </Flag>
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByText('Beta Content')).toBeInTheDocument();
+    });
+
+    it('hides children when a user override disables a globally enabled flag', () => {
+      const config = { features: { beta: true } };
+      const userOverrides = { user1: { features: { beta: false } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <Flag flag="features.beta" userId="user1">
+            <div>Beta Content</div>
+          </Flag>
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.queryByText('Beta Content')).not.toBeInTheDocument();
+    });
+
+    it('falls back to global config when the user has no override for the key', () => {
+      const config = { features: { auth: true } };
+      const userOverrides = { user1: { features: { beta: true } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <Flag flag="features.auth" userId="user1">
+            <div>Auth Content</div>
+          </Flag>
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByText('Auth Content')).toBeInTheDocument();
+    });
+
+    it('falls back to global config when the userId is unknown', () => {
+      const config = { features: { beta: true } };
+      const userOverrides = { user1: { features: { beta: false } } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <Flag flag="features.beta" userId="unknown-user">
+            <div>Beta Content</div>
+          </Flag>
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByText('Beta Content')).toBeInTheDocument();
+    });
+
+    it('applies array value matching against the user override', () => {
+      const config = { platforms: ['facebook'] };
+      const userOverrides = { user1: { platforms: ['facebook', 'tiktok'] } };
+
+      render(
+        <FeatureFlagProvider config={config} userOverrides={userOverrides}>
+          <Flag flag="platforms" value="tiktok" userId="user1">
+            <div>TikTok Widget</div>
+          </Flag>
+          <Flag flag="platforms" value="tiktok">
+            <div>Global TikTok Widget</div>
+          </Flag>
+        </FeatureFlagProvider>
+      );
+
+      expect(screen.getByText('TikTok Widget')).toBeInTheDocument();
+      expect(screen.queryByText('Global TikTok Widget')).not.toBeInTheDocument();
+    });
   });
 });
