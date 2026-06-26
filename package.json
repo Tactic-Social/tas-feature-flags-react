@@ -1,7 +1,7 @@
 {
   "name": "@tactic-social/tas-feature-flags-react",
   "repository": "https://github.com/Tactic-Social/tas-feature-flags-react",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "A lightweight, type-safe feature flag library for React applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
