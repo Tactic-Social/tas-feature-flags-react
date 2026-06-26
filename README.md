@@ -230,6 +230,7 @@ Declarative component for conditional rendering based on feature flags.
 **Props:**
 - `flag`: `string` (required) - The feature flag key
 - `value?`: `any` (optional) - Value to check in arrays or match exactly
+- `userId?`: `string` (optional) - When provided, the flag is resolved using that user's overrides, falling back to global config. When omitted, the global config is used.
 - `children`: `ReactNode` (required) - Content to render when enabled
 
 **Examples:**
@@ -247,6 +248,11 @@ Declarative component for conditional rendering based on feature flags.
 {/* Render if exact match */}
 <Flag flag="theme" value="dark">
   <DarkModeStyles />
+</Flag>
+
+{/* Render based on a specific user's overrides (falls back to global config) */}
+<Flag flag="features.beta" userId="user1">
+  <BetaFeature />
 </Flag>
 ```
 
@@ -363,6 +369,29 @@ function Dashboard() {
     <div>
       {hasBeta && <BetaFeature />}
       <p>Max accounts: {maxAccounts}</p>
+    </div>
+  );
+}
+```
+
+The `<Flag>` component is override-aware too — pass a `userId` to resolve the flag
+against that user's overrides (falling back to global config):
+
+```tsx
+import { Flag } from '@tactic-social/tas-feature-flags-react';
+
+function Dashboard() {
+  return (
+    <div>
+      {/* Rendered because user1 overrides features.beta to true */}
+      <Flag flag="features.beta" userId="user1">
+        <BetaFeature />
+      </Flag>
+
+      {/* Without userId, the global config value is used */}
+      <Flag flag="features.beta">
+        <BetaFeature />
+      </Flag>
     </div>
   );
 }
@@ -491,6 +520,7 @@ This library works with any React-based framework:
 - Simple show/hide logic
 - Declarative, readable JSX
 - No need for flag value in logic
+- Per-user rendering via the `userId` prop (respects user overrides)
 
 ### 2. Organize Flags Hierarchically
 
